@@ -78,6 +78,15 @@ def test_slice_splits_on_paragraphs(monkeypatch):
     assert first == pages[0]
 
 
+def test_slice_never_cuts_words_when_lines_exist(monkeypatch):
+    monkeypatch.setattr(S, "PAGE_CHARS", 100)
+    text = "\n".join(f"line {i} with some words in it" for i in range(20))
+    total = S._slice(text, 1)[1]
+    chunks = [S._slice(text, p)[0] for p in range(1, total + 1)]
+    assert "".join(chunks) == text
+    assert all(c.rstrip().endswith("it") for c in chunks)
+
+
 def test_output_marks_content_untrusted_and_pages(monkeypatch):
     monkeypatch.setattr(S, "PAGE_CHARS", 50)
     page = {"url": "https://example.com/", "status": 200, "title": "T", "text": "a" * 40 + "\n\n" + "b" * 40}

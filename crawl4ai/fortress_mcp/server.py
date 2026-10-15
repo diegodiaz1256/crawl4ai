@@ -163,13 +163,17 @@ def _validate(url: str) -> str:
 
 
 def _slice(text: str, page: int) -> tuple:
-    """Split on paragraph boundaries into chunks of about PAGE_CHARS."""
+    """Split into chunks of at most PAGE_CHARS, at the cleanest nearby break."""
     chunks, start = [], 0
     while start < len(text):
         end = min(len(text), start + PAGE_CHARS)
         if end < len(text):
-            cut = text.rfind("\n\n", start + PAGE_CHARS // 2, end)
-            end = cut if cut != -1 else end
+            # Prefer a paragraph break, then a line break, then a sentence end.
+            for sep in ("\n\n", "\n", ". "):
+                cut = text.rfind(sep, start + PAGE_CHARS // 2, end)
+                if cut != -1:
+                    end = cut + len(sep) if sep == ". " else cut
+                    break
         chunks.append(text[start:end])
         start = end
     chunks = chunks or [""]
