@@ -19,6 +19,8 @@
 > - All browser traffic goes through the pinning egress proxy from `deploy/docker`, loopback included, so private, loopback, link-local and metadata addresses are refused even behind redirects or DNS rebinding. `CRAWL4AI_ALLOW_INTERNAL_URLS=true` allows them for a trusted network.
 > - The tool accepts a URL only: no JavaScript, `file://`, `raw:`, credentials in URLs, downloads or files written. Throwaway browser profile, TLS always verified.
 > - Output is paged (`FORTRESS_MCP_PAGE_CHARS`, default 12000), cached in memory for 10 minutes, and wrapped in `<untrusted-web-content>` markers. `FORTRESS_MCP_CONCURRENCY` (default 2) and `FORTRESS_MCP_TIMEOUT` (default 45 s) bound the load.
+>
+> **Credits and licenses.** This fork includes software developed by UncleCode (https://x.com/unclecode) as part of the Crawl4AI project (https://github.com/unclecode/crawl4ai), under Apache 2.0 with its attribution requirement. Fortress is made by Tilion Inc. ([tiliondev/fortress](https://github.com/tiliondev/fortress)) and is not included here: it is installed separately and its current releases use the Fortress Source Available License 1.1, which is not open source and limits some production use, so check that your use is covered. This fork is not affiliated with Tilion Inc. See [NOTICE](NOTICE) for the full list of changes and third-party credits.
 
 # 🚀🤖 Crawl4AI: the open-source web crawler for LLMs and AI agents
 

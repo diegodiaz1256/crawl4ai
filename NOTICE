@@ -1,0 +1,50 @@
+NOTICE
+
+This repository is a fork of Crawl4AI (https://github.com/unclecode/crawl4ai),
+licensed under the Apache License 2.0 with an attribution requirement (see
+LICENSE). As that license requires:
+
+    This product includes software developed by UncleCode
+    (https://x.com/unclecode) as part of the Crawl4AI project
+    (https://github.com/unclecode/crawl4ai).
+
+Changes in this fork (diegodiaz1256/crawl4ai), 2026-10-15
+----------------------------------------------------------
+Added:
+  crawl4ai/fortress.py             Fortress executable lookup and launch flags
+  crawl4ai/fortress_mcp/server.py  stdio MCP server with the read_url tool
+  tests/unit/test_fortress_mode.py
+  tests/unit/test_fortress_mcp.py
+
+Copied unchanged from deploy/docker of the same upstream project (only the
+import of egress_broker made relative; a test checks they stay in sync):
+  crawl4ai/fortress_mcp/egress_broker.py
+  crawl4ai/fortress_mcp/egress_proxy.py
+
+Modified (each carries a note at the top):
+  crawl4ai/async_configs.py         BrowserConfig(fortress=..., fortress_path=...)
+  crawl4ai/async_crawler_strategy.py  no UA override or navigator script in fortress mode
+  crawl4ai/browser_manager.py       Fortress binary, quiet launch flags, proxy flags
+  pyproject.toml                    "mcp" extra and crawl4ai-fortress-mcp command
+  README.md                         fork note at the top
+
+Third-party software this fork works with
+-----------------------------------------
+Fortress, by Tilion Inc. (https://github.com/tiliondev/fortress)
+  A patched Chromium build. It is NOT included in or redistributed by this
+  repository: fortress mode only launches a copy the user has installed
+  separately. Current Fortress releases are under the Fortress Source
+  Available License 1.1, which is not an open-source license. It needs a
+  (free) license key, allows free non-production use for anyone and free
+  production use for individuals' personal non-commercial use and for
+  organizations under its funding and revenue thresholds; other production
+  use needs a Tilion subscription. Read its LICENSE before using it, and
+  check that your use is covered. Earlier Fortress releases were BSD-3-Clause.
+  "Fortress" and "Tilion" are names of Tilion Inc.; this fork is not
+  affiliated with or endorsed by Tilion Inc.
+
+Chromium (https://www.chromium.org), on which Fortress is built, BSD-3-Clause
+  and other licenses listed in its own credits.
+
+MCP Python SDK (https://github.com/modelcontextprotocol/python-sdk), MIT
+  License, used by crawl4ai/fortress_mcp when installed with the "mcp" extra.

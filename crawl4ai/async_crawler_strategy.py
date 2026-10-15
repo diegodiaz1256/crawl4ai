@@ -1,3 +1,4 @@
+# Modified in the diegodiaz1256/crawl4ai fork (2026-10-15): adds fortress mode. See NOTICE.
 from __future__ import annotations
 
 import asyncio
