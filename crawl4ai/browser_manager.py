@@ -129,15 +129,20 @@ class ManagedBrowser:
                 "--disable-software-rasterizer",
                 "--disable-dev-shm-usage",
             ])
+        flags.extend(ManagedBrowser.proxy_flags(config))
+        # dedupe
+        return apply_sandbox_policy(list(dict.fromkeys(flags)))
+
+    @staticmethod
+    def proxy_flags(config: BrowserConfig) -> List[str]:
         # proxy support — only pass server URL, never credentials.
         # Chromium's --proxy-server flag silently ignores inline user:pass@.
         # Auth credentials are handled at the Playwright context level instead.
         if config.proxy:
-            flags.append(f"--proxy-server={config.proxy}")
-        elif config.proxy_config:
-            flags.append(f"--proxy-server={config.proxy_config.server}")
-        # dedupe
-        return apply_sandbox_policy(list(dict.fromkeys(flags)))
+            return [f"--proxy-server={config.proxy}"]
+        if config.proxy_config:
+            return [f"--proxy-server={config.proxy_config.server}"]
+        return []
 
     browser_type: str
     user_data_dir: str
@@ -412,6 +417,7 @@ class ManagedBrowser:
             # merge common launch flags
             if self.browser_config.fortress:
                 flags.extend(fortress_launch_flags())
+                flags.extend(self.proxy_flags(self.browser_config))
             else:
                 flags.extend(self.build_browser_flags(self.browser_config))
             # The default context of a CDP-connected browser takes no

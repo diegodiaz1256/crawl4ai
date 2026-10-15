@@ -190,3 +190,13 @@ def test_fortress_keeps_its_own_fingerprint():
     assert "Chrome/116" not in seen.get("user-agent", "")
     # sec-ch-ua, if present, comes from the browser itself and matches its UA
     assert "116" not in seen.get("sec-ch-ua", "")
+
+
+def test_managed_launch_keeps_proxy_in_fortress_mode(tmp_path):
+    from crawl4ai import ProxyConfig
+
+    exe = _fake_build(tmp_path, "153.0.8010.36")
+    bc = BrowserConfig(fortress=True, fortress_path=exe, proxy_config=ProxyConfig(server="http://127.0.0.1:3128"))
+    mb = ManagedBrowser(browser_config=bc)
+    mb.user_data_dir = str(tmp_path / "profile")
+    assert "--proxy-server=http://127.0.0.1:3128" in asyncio.run(mb._get_browser_args())
