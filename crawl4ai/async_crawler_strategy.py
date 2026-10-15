@@ -546,7 +546,15 @@ class AsyncPlaywrightCrawlerStrategy(AsyncCrawlerStrategy):
         # changing it here would only desync browser_config from reality.
         # Users should set user_agent or user_agent_mode on BrowserConfig.
         ua_changed = False
-        if not self.browser_config.use_persistent_context:
+        if getattr(self.browser_config, "fortress", False):
+            # Fortress sends its own User-Agent; any override would contradict
+            # the rest of its fingerprint.
+            if config.user_agent or config.user_agent_mode == "random":
+                self.logger.warning(
+                    message="fortress=True ignores CrawlerRunConfig user_agent and user_agent_mode",
+                    tag="FORTRESS",
+                )
+        elif not self.browser_config.use_persistent_context:
             user_agent_to_override = config.user_agent
             if user_agent_to_override:
                 self.browser_config.user_agent = user_agent_to_override
@@ -596,7 +604,7 @@ class AsyncPlaywrightCrawlerStrategy(AsyncCrawlerStrategy):
             # at context level by setup_context(). This fallback covers
             # managed-browser / persistent / CDP paths where setup_context()
             # is called without a crawlerRunConfig.
-            if config.override_navigator or config.simulate_user or config.magic:
+            if (config.override_navigator or config.simulate_user or config.magic) and not getattr(self.browser_config, "fortress", False):
                 if not getattr(context, '_crawl4ai_nav_overrider_injected', False):
                     await context.add_init_script(load_js_script("navigator_overrider"))
                     context._crawl4ai_nav_overrider_injected = True

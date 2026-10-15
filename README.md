@@ -1,3 +1,18 @@
+> **Fork note (diegodiaz1256/crawl4ai, branch `fortress-mode`).** Adds `BrowserConfig(fortress=True)`, which launches the [Fortress](https://hub.docker.com/r/tilion/fortress) browser (a Chromium build that fixes its fingerprint in C++) and keeps crawl4ai from contradicting it: no User-Agent or `sec-ch-ua` override, no playwright-stealth, no `navigator_overrider` (even with `magic=True`), and only launch flags a page cannot observe (no `--disable-gpu`, `--no-sandbox` or `--disable-blink-features=AutomationControlled`).
+>
+> ```python
+> from crawl4ai import AsyncWebCrawler, BrowserConfig
+>
+> # Finds the newest build in ~/.cache/tillion-fortress, or set FORTRESS_PATH / fortress_path=...
+> async with AsyncWebCrawler(config=BrowserConfig(fortress=True)) as crawler:
+>     result = await crawler.arun("https://example.com")
+>
+> # Or connect to a Fortress that is already running with --remote-debugging-port=9222
+> BrowserConfig(fortress=True, cdp_url="http://127.0.0.1:9222")
+> ```
+>
+> See `crawl4ai/fortress.py` and `tests/unit/test_fortress_mode.py`.
+
 # 🚀🤖 Crawl4AI: the open-source web crawler for LLMs and AI agents
 
 <div align="center">

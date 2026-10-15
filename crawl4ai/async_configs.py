@@ -1023,6 +1023,13 @@ class BrowserConfig:
                            Default: [].
         enable_stealth (bool): If True, applies playwright-stealth to bypass basic bot detection.
                               Cannot be used with use_undetected browser mode. Default: False.
+        fortress (bool): If True, launches the Fortress browser (a Chromium build that fixes its
+                         fingerprint in C++) and leaves the fingerprint to it: no User-Agent or
+                         sec-ch-ua override, no playwright-stealth, no navigator overrides and
+                         only launch flags the page cannot observe. With cdp_url, connects to a
+                         running Fortress instead of launching one. Default: False.
+        fortress_path (str or None): Fortress executable. Default: $FORTRESS_PATH, else the newest
+                                     build in the tilion-fortress cache.
         memory_saving_mode (bool): If True, adds aggressive cache discard and V8 heap cap flags
                                    to reduce Chromium memory growth. Recommended for high-volume
                                    crawling (1000+ pages). May slightly reduce performance due to
@@ -1089,6 +1096,8 @@ class BrowserConfig:
         init_scripts: List[str] = None,
         memory_saving_mode: bool = False,
         max_pages_before_recycle: int = 0,
+        fortress: bool = False,
+        fortress_path: Optional[str] = None,
     ):
         
         self.browser_type = browser_type
@@ -1156,6 +1165,8 @@ class BrowserConfig:
         self.init_scripts = init_scripts if init_scripts is not None else []
         self.memory_saving_mode = memory_saving_mode
         self.max_pages_before_recycle = max_pages_before_recycle
+        self.fortress = fortress
+        self.fortress_path = fortress_path
 
         fa_user_agenr_generator = ValidUAGenerator()
         if self.user_agent_mode == "random":
@@ -1165,8 +1176,11 @@ class BrowserConfig:
         else:
             pass
 
-        self.browser_hint = UAGen.generate_client_hints(self.user_agent)
-        self.headers.setdefault("sec-ch-ua", self.browser_hint)
+        if self.fortress:
+            self._apply_fortress()
+        else:
+            self.browser_hint = UAGen.generate_client_hints(self.user_agent)
+            self.headers.setdefault("sec-ch-ua", self.browser_hint)
 
         # Set appropriate browser management flags based on browser_mode
         if self.browser_mode == "builtin":
@@ -1194,6 +1208,27 @@ class BrowserConfig:
                 "enable_stealth cannot be used with browser_mode='builtin'. "
                 "Stealth mode requires a dedicated browser instance."
             )
+
+    def _apply_fortress(self):
+        """Fortress already presents a consistent Chrome fingerprint. Every
+        disguise crawl4ai adds on top contradicts it, so switch them off."""
+        if self.browser_type != "chromium":
+            raise ValueError("fortress=True requires browser_type='chromium'.")
+        default_ua = inspect.signature(BrowserConfig.__init__).parameters["user_agent"].default
+        if self.user_agent_mode == "random" or self.user_agent not in (default_ua, None, ""):
+            warnings.warn("fortress=True ignores user_agent and user_agent_mode: Fortress sends its own.", stacklevel=3)
+        if self.enable_stealth:
+            warnings.warn("fortress=True ignores enable_stealth: playwright-stealth JS patches are detectable.", stacklevel=3)
+        self.user_agent = None
+        self.user_agent_mode = ""
+        self.enable_stealth = False
+        self.browser_hint = None
+        self.headers = {k: v for k, v in self.headers.items() if k.lower() not in ("user-agent", "sec-ch-ua")}
+        # Fortress always runs as a managed subprocess over CDP. Playwright's
+        # persistent-context launch would start its own Chromium instead; the
+        # managed browser keeps the profile in user_data_dir all the same.
+        self.use_managed_browser = True
+        self.use_persistent_context = False
 
     @staticmethod
     def from_kwargs(kwargs: dict, provenance: "Provenance" = None) -> "BrowserConfig":
@@ -1253,6 +1288,8 @@ class BrowserConfig:
             "init_scripts": self.init_scripts,
             "memory_saving_mode": self.memory_saving_mode,
             "max_pages_before_recycle": self.max_pages_before_recycle,
+            "fortress": self.fortress,
+            "fortress_path": self.fortress_path,
         }
 
 

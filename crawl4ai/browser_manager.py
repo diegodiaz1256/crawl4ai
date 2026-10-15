@@ -15,6 +15,7 @@ from .js_snippet import load_js_script
 from .config import DOWNLOAD_PAGE_TIMEOUT
 from .async_configs import BrowserConfig, CrawlerRunConfig
 from .utils import get_chromium_path
+from .fortress import find_fortress_path, fortress_launch_flags
 import warnings
 
 
@@ -390,6 +391,8 @@ class ManagedBrowser:
         return paths.get(self.browser_type)
 
     async def _get_browser_path(self) -> str:
+        if self.browser_config.fortress:
+            return find_fortress_path(self.browser_config.fortress_path)
         browser_path = await get_chromium_path(self.browser_type)
         return browser_path
 
@@ -407,7 +410,10 @@ class ManagedBrowser:
             if self.browser_config.viewport_height and self.browser_config.viewport_width:
                 flags.append(f"--window-size={self.browser_config.viewport_width},{self.browser_config.viewport_height}")
             # merge common launch flags
-            flags.extend(self.build_browser_flags(self.browser_config))
+            if self.browser_config.fortress:
+                flags.extend(fortress_launch_flags())
+            else:
+                flags.extend(self.build_browser_flags(self.browser_config))
             # The default context of a CDP-connected browser takes no
             # ignore_https_errors option, so insecure mode needs the launch flag.
             if self.browser_config.ignore_https_errors:
@@ -1277,7 +1283,7 @@ class BrowserManager:
             )
 
         # Handle navigator overrides
-        if crawlerRunConfig:
+        if crawlerRunConfig and not self.config.fortress:
             if (
                 crawlerRunConfig.override_navigator
                 or crawlerRunConfig.simulate_user
