@@ -46,8 +46,20 @@ def _env_int(name: str, default: int) -> int:
 PAGE_CHARS = _env_int("FORTRESS_MCP_PAGE_CHARS", 12000)
 CONCURRENCY = _env_int("FORTRESS_MCP_CONCURRENCY", 2)
 TIMEOUT_S = _env_int("FORTRESS_MCP_TIMEOUT", 45)
+SETTLE_S = _env_int("FORTRESS_MCP_SETTLE", 5)
 CACHE_TTL_S = 600
 CACHE_SIZE = 16
+
+
+def _persona_flags() -> list:
+    """Fortress picks a random timezone and language per launch. Anti-bot
+    sensors compare them with the IP's location, so pin them to match yours."""
+    flags = []
+    for env, flag in (("FORTRESS_MCP_TIMEZONE", "--uxr-timezone"), ("FORTRESS_MCP_LANGUAGES", "--uxr-languages")):
+        value = os.environ.get(env, "").strip()
+        if value:
+            flags.append(f"{flag}={value}")
+    return flags
 
 
 class Reader:
@@ -79,7 +91,7 @@ class Reader:
                     debugging_port=_env_int("FORTRESS_MCP_CDP_PORT", 9351),
                     proxy_config=ProxyConfig(server=proxy_url),
                     # Chromium skips the proxy for loopback unless told otherwise.
-                    extra_args=["--proxy-bypass-list=<-loopback>"],
+                    extra_args=["--proxy-bypass-list=<-loopback>", *_persona_flags()],
                     ignore_https_errors=False,
                     accept_downloads=False,
                     verbose=False,
@@ -117,7 +129,8 @@ class Reader:
             cache_mode=CacheMode.BYPASS,
             markdown_generator=self._md[mode],
             excluded_tags=["nav", "footer", "header", "aside", "form"] if mode == "article" else None,
-            wait_until="domcontentloaded",
+            wait_until="load",
+            delay_before_return_html=SETTLE_S,
             page_timeout=(TIMEOUT_S - 5) * 1000,
             verbose=False,
         )
