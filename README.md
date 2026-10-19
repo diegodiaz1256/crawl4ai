@@ -20,6 +20,18 @@
 > - The tool accepts a URL only: no JavaScript, `file://`, `raw:`, credentials in URLs, downloads or files written. Throwaway browser profile, TLS always verified.
 > - Output is paged (`FORTRESS_MCP_PAGE_CHARS`, default 12000), cached in memory for 10 minutes, and wrapped in `<untrusted-web-content>` markers. `FORTRESS_MCP_CONCURRENCY` (default 2) and `FORTRESS_MCP_TIMEOUT` (default 45 s) bound the load.
 >
+> **Match the persona to your IP (needed for DataDome sites such as Idealista).** Fortress picks a random timezone and language on every launch. Anti-bot sensors compare them with the location of your IP, and DataDome's device check hangs on "Verificación del dispositivo…" when they disagree. Set both to where you browse from:
+>
+> ```bash
+> claude mcp add fortress-reader --scope user \
+>   -e FORTRESS_MCP_TIMEZONE=Europe/Madrid -e FORTRESS_MCP_LANGUAGES=es-ES,es \
+>   -- crawl4ai-fortress-mcp
+> ```
+>
+> They become Fortress's `--uxr-timezone` and `--uxr-languages` flags. Use an IANA timezone, and change them if you use a VPN. From Python, pass the same flags: `BrowserConfig(fortress=True, extra_args=["--uxr-timezone=Europe/Madrid", "--uxr-languages=es-ES,es"])`.
+>
+> The server waits for `load` plus a settle delay (`FORTRESS_MCP_SETTLE`, default 5 s) so JavaScript challenges, like Booking's, finish before the page is read. A residential IP helps; datacenter IPs are often blocked regardless. Fortress needs `tilion-fortress activate` once for the full engine.
+>
 > **Credits and licenses.** This fork includes software developed by UncleCode (https://x.com/unclecode) as part of the Crawl4AI project (https://github.com/unclecode/crawl4ai), under Apache 2.0 with its attribution requirement. Fortress is made by Tilion Inc. ([tiliondev/fortress](https://github.com/tiliondev/fortress)) and is not included here: it is installed separately and its current releases use the Fortress Source Available License 1.1, which is not open source and limits some production use, so check that your use is covered. This fork is not affiliated with Tilion Inc. See [NOTICE](NOTICE) for the full list of changes and third-party credits.
 
 # 🚀🤖 Crawl4AI: the open-source web crawler for LLMs and AI agents
