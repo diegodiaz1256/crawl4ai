@@ -30,7 +30,9 @@
 >
 > They become Fortress's `--uxr-timezone` and `--uxr-languages` flags. Use an IANA timezone, and change them if you use a VPN. From Python, pass the same flags: `BrowserConfig(fortress=True, extra_args=["--uxr-timezone=Europe/Madrid", "--uxr-languages=es-ES,es"])`.
 >
-> The server waits for `load` plus a settle delay (`FORTRESS_MCP_SETTLE`, default 5 s) so JavaScript challenges, like Booking's, finish before the page is read. A residential IP helps; datacenter IPs are often blocked regardless. Fortress needs `tilion-fortress activate` once for the full engine.
+> The server reads a page after `load` plus a 1.5 s settle. If the result is thin (under 300 chars) or the status is 202, it re-reads with the long settle (`FORTRESS_MCP_SETTLE`, default 5 s) so JavaScript challenges, like Booking's, finish first. A residential IP helps; datacenter IPs are often blocked regardless. Fortress needs `tilion-fortress activate` once for the full engine.
+>
+> **Spending fewer tokens.** `read_url` takes two optional arguments: `max_chars` caps the text returned per call (the rest stays available as `page=2, 3...`), and `links=False` turns `[text](url)` into plain text (a Booking results page went from 40,126 to 15,469 chars). Page 2 and later get a one-line header, and a note appears when article mode keeps under 30% of the page, so `mode="full"` is a deliberate choice.
 >
 > **Credits and licenses.** This fork includes software developed by UncleCode (https://x.com/unclecode) as part of the Crawl4AI project (https://github.com/unclecode/crawl4ai), under Apache 2.0 with its attribution requirement. Fortress is made by Tilion Inc. ([tiliondev/fortress](https://github.com/tiliondev/fortress)) and is not included here: it is installed separately and its current releases use the Fortress Source Available License 1.1, which is not open source and limits some production use, so check that your use is covered. This fork is not affiliated with Tilion Inc. See [NOTICE](NOTICE) for the full list of changes and third-party credits.
 
