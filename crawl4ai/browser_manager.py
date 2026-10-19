@@ -1,5 +1,6 @@
 # Modified in the diegodiaz1256/crawl4ai fork (2026-10-15): adds fortress mode. See NOTICE.
 import asyncio
+import atexit
 import time
 from typing import Dict, List, Optional, Tuple
 import os
@@ -265,8 +266,11 @@ class ManagedBrowser:
 
         # Start browser process
         try:
-            # Use DETACHED_PROCESS flag on Windows to fully detach the process
-            # On Unix, we'll use preexec_fn=os.setpgrp to start the process in a new process group
+            # Use DETACHED_PROCESS flag on Windows to fully detach the process.
+            # On Unix, use start_new_session=True (setsid) so the browser and its
+            # Zygote/GPU children are detached from the controlling terminal and
+            # isolated in their own session and process group (preventing SIGHUP
+            # from killing the GPU/Zygote before browser shutdown completes).
             if sys.platform == "win32":
                 self.browser_process = subprocess.Popen(
                     args, 
@@ -279,8 +283,9 @@ class ManagedBrowser:
                     args, 
                     stdout=subprocess.PIPE, 
                     stderr=subprocess.PIPE,
-                    preexec_fn=os.setpgrp  # Start in a new process group
+                    start_new_session=True,
                 )
+            atexit.register(self._atexit_cleanup)
                 
             # If verbose is True print args used to run the process
             if self.logger and self.browser_config.verbose:
@@ -438,16 +443,36 @@ class ManagedBrowser:
             raise NotImplementedError(f"Browser type {self.browser_type} not supported")
         return base + flags
 
+    def _atexit_cleanup(self):
+        proc = self.browser_process
+        if proc and proc.poll() is None:
+            try:
+                proc.terminate()
+                proc.wait(timeout=5)
+            except Exception:
+                try:
+                    if sys.platform != "win32":
+                        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                    else:
+                        proc.kill()
+                except Exception:
+                    pass
+                try:
+                    proc.wait(timeout=1)
+                except Exception:
+                    pass
+
     async def cleanup(self):
         """Cleanup browser process and temporary directory"""
         # Set shutting_down flag BEFORE any termination actions
         self.shutting_down = True
+        atexit.unregister(self._atexit_cleanup)
 
         if self.browser_process:
             try:
                 # For builtin browsers that should persist, we should check if it's a detached process
                 # Only terminate if we have proper control over the process
-                if not self.browser_process.poll():
+                if self.browser_process.poll() is None:
                     # Process is still running
                     self.browser_process.terminate()
                     # Wait for process to end gracefully
@@ -471,23 +496,29 @@ class ManagedBrowser:
                             except (ProcessLookupError, OSError):
                                 pass
                         await asyncio.sleep(0.1)  # Brief wait for kill to take effect
+                    try:
+                        self.browser_process.wait(timeout=1)
+                    except Exception:
+                        pass
 
             except Exception as e:
-                self.logger.error(
-                    message="Error terminating browser: {error}",
-                    tag="ERROR", 
-                    params={"error": str(e)},
-                )
+                if self.logger:
+                    self.logger.error(
+                        message="Error terminating browser: {error}",
+                        tag="ERROR", 
+                        params={"error": str(e)},
+                    )
 
         if self.temp_dir and os.path.exists(self.temp_dir):
             try:
                 shutil.rmtree(self.temp_dir)
             except Exception as e:
-                self.logger.error(
-                    message="Error removing temporary directory: {error}",
-                    tag="ERROR",
-                    params={"error": str(e)},
-                )
+                if self.logger:
+                    self.logger.error(
+                        message="Error removing temporary directory: {error}",
+                        tag="ERROR",
+                        params={"error": str(e)},
+                    )
                 
     # These methods have been moved to BrowserProfiler class
     @staticmethod
@@ -2124,37 +2155,48 @@ class BrowserManager:
             self._launched_persistent = False
             return
 
-        if self.config.sleep_on_close:
-            await asyncio.sleep(0.5)
+        try:
+            if self.config.sleep_on_close:
+                await asyncio.sleep(0.5)
 
-        session_ids = list(self.sessions.keys())
-        for session_id in session_ids:
-            await self.kill_session(session_id)
+            session_ids = list(self.sessions.keys())
+            for session_id in session_ids:
+                try:
+                    await self.kill_session(session_id)
+                except Exception:
+                    pass
 
-        # Now close all contexts we created. This reclaims memory from ephemeral contexts.
-        for ctx in list(self.contexts_by_config.values()):
+            # Now close all contexts we created. This reclaims memory from ephemeral contexts.
+            for ctx in list(self.contexts_by_config.values()):
+                try:
+                    await ctx.close()
+                except Exception as e:
+                    if self.logger:
+                        self.logger.error(
+                            message="Error closing context: {error}",
+                            tag="ERROR",
+                            params={"error": str(e)}
+                        )
+            self.contexts_by_config.clear()
+            self._context_refcounts.clear()
+            self._context_last_used.clear()
+            self._page_to_sig.clear()
+
+            if self.browser:
+                try:
+                    await self.browser.close()
+                except Exception:
+                    pass
+                self.browser = None
+        finally:
             try:
-                await ctx.close()
-            except Exception as e:
-                self.logger.error(
-                    message="Error closing context: {error}",
-                    tag="ERROR",
-                    params={"error": str(e)}
-                )
-        self.contexts_by_config.clear()
-        self._context_refcounts.clear()
-        self._context_last_used.clear()
-        self._page_to_sig.clear()
-
-        if self.browser:
-            await self.browser.close()
-            self.browser = None
-
-        if self.managed_browser:
-            await asyncio.sleep(0.5)
-            await self.managed_browser.cleanup()
-            self.managed_browser = None
-
-        if self.playwright:
-            await self.playwright.stop()
-            self.playwright = None
+                if self.managed_browser:
+                    mb, self.managed_browser = self.managed_browser, None
+                    await mb.cleanup()
+            finally:
+                if self.playwright:
+                    pw, self.playwright = self.playwright, None
+                    try:
+                        await pw.stop()
+                    except Exception:
+                        pass

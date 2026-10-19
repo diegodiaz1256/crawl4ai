@@ -200,3 +200,33 @@ def test_managed_launch_keeps_proxy_in_fortress_mode(tmp_path):
     mb = ManagedBrowser(browser_config=bc)
     mb.user_data_dir = str(tmp_path / "profile")
     assert "--proxy-server=http://127.0.0.1:3128" in asyncio.run(mb._get_browser_args())
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX session check")
+def test_managed_browser_isolates_session_and_cleans_up_on_close_error(tmp_path):
+    from crawl4ai.browser_manager import BrowserManager
+
+    exe = tmp_path / "fake-chrome"
+    exe.write_text("#!/bin/sh\nsleep 30\n")
+    exe.chmod(exe.stat().st_mode | stat.S_IXUSR)
+
+    bc = BrowserConfig(fortress=True, fortress_path=str(exe), debugging_port=9399)
+    bm = BrowserManager(browser_config=bc)
+
+    class BrokenBrowser:
+        async def close(self):
+            raise RuntimeError("CDP connection already closed by SIGINT")
+
+    async def run():
+        await bm.managed_browser.start()
+        proc = bm.managed_browser.browser_process
+        assert proc is not None and proc.poll() is None
+        # Must be a session leader in its own POSIX session so terminal SIGHUP
+        # cannot kill the GPU/Zygote processes before browser teardown.
+        assert os.getsid(proc.pid) == proc.pid
+        bm.browser = BrokenBrowser()
+        await bm.close()
+        assert proc.poll() is not None
+
+    asyncio.run(run())
+

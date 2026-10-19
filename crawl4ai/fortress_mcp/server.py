@@ -89,10 +89,14 @@ class Reader:
             return self._crawler
 
     async def close(self):
-        if self._crawler is not None:
-            await self._crawler.close()
-        if self._proxy is not None:
-            await self._proxy.stop()
+        crawler, self._crawler = self._crawler, None
+        proxy, self._proxy = self._proxy, None
+        try:
+            if crawler is not None:
+                await crawler.close()
+        finally:
+            if proxy is not None:
+                await proxy.stop()
 
     async def _reset(self):
         crawler, self._crawler = self._crawler, None
@@ -226,9 +230,14 @@ async def _serve(mcp_stdout) -> None:
     try:
         async with stdio_server(stdout=out) as (read_stream, write_stream):
             server = mcp._mcp_server
-            await server.run(read_stream, write_stream, server.create_initialization_options())
+            try:
+                await server.run(read_stream, write_stream, server.create_initialization_options())
+            finally:
+                with anyio.CancelScope(shield=True):
+                    await reader.close()
     finally:
-        await reader.close()
+        with anyio.CancelScope(shield=True):
+            await reader.close()
 
 
 def main() -> None:
