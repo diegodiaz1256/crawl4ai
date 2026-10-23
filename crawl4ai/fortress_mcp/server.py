@@ -65,6 +65,14 @@ def _persona_flags() -> list:
     return flags
 
 
+_GONE = ("wrap_api_call", "Target page, context or browser has been closed", "Browser has been closed",
+         "Connection closed", "browser has disconnected")
+
+
+def _browser_gone(error: Optional[str]) -> bool:
+    return any(s in (error or "") for s in _GONE)
+
+
 class Reader:
     """One Fortress browser for the process lifetime, started on first use."""
 
@@ -153,6 +161,11 @@ class Reader:
                     # longer than a normal page: only then pay for the long settle.
                     if result.success and thin(result) and SETTLE_S > QUICK_SETTLE_S:
                         result = await asyncio.wait_for(crawler.arun(url, config=run_config(SETTLE_S)), TIMEOUT_S)
+                    # arun() catches a dead browser itself and hands it back as a
+                    # failed result, so relaunch on that too, not only on raises.
+                    if not result.success and _browser_gone(result.error_message) and attempt == 1:
+                        await self._reset()
+                        continue
                     break
                 except asyncio.TimeoutError:
                     raise RuntimeError(f"timed out after {TIMEOUT_S}s")

@@ -68,9 +68,9 @@ def test_slice_splits_on_paragraphs(monkeypatch):
     monkeypatch.setattr(S, "PAGE_CHARS", 100)
     text = "\n\n".join(f"paragraph {i} " + "x" * 30 for i in range(12))
     pages = []
-    first, total = S._slice(text, 1)
+    first, total = S._slice(text, 1, 100)
     for p in range(1, total + 1):
-        chunk, _ = S._slice(text, p)
+        chunk, _ = S._slice(text, p, 100)
         assert len(chunk) <= 100
         pages.append(chunk)
     assert total > 1
@@ -88,8 +88,8 @@ def test_slice_never_cuts_words_when_lines_exist(monkeypatch):
 
 
 def test_output_marks_content_untrusted_and_pages(monkeypatch):
-    monkeypatch.setattr(S, "PAGE_CHARS", 50)
-    page = {"url": "https://example.com/", "status": 200, "title": "T", "text": "a" * 40 + "\n\n" + "b" * 40}
+    monkeypatch.setattr(S, "PAGE_CHARS", 250)  # read_url never cuts below 200
+    page = {"url": "https://example.com/", "status": 200, "title": "T", "text": "a" * 240 + "\n\n" + "b" * 240}
 
     async def fake_fetch(url, mode):
         return page
@@ -100,8 +100,42 @@ def test_output_marks_content_untrusted_and_pages(monkeypatch):
     out = _call(url="https://example.com/", mode="article", page=2)
     assert "Page 2/2" in out
     assert out.rstrip().endswith("</untrusted-web-content>")
-    assert "b" * 40 in out and "a" * 40 not in out
+    assert "b" * 240 in out and "a" * 240 not in out
     assert "page 3 does not exist" in _call(url="https://example.com/", mode="article", page=3)
+
+
+def test_dead_browser_reported_as_failed_result_relaunches(monkeypatch):
+    """arun() swallows a dead browser into result.success=False; the reader must
+    still relaunch it once instead of failing every later call."""
+    from types import SimpleNamespace
+
+    dead = SimpleNamespace(success=False, status_code=None, redirected_url=None,
+                           error_message="Unexpected error in _crawl_web at line 636 in wrap_api_call (x)")
+    md = SimpleNamespace(raw_markdown="hello " * 100, fit_markdown="hello " * 100)
+    good = SimpleNamespace(success=True, status_code=200, redirected_url="https://example.com/", markdown=md,
+                           metadata={"title": "T"}, url="https://example.com/", error_message=None)
+    crawlers, resets = [dead, good], []
+
+    class FakeCrawler:
+        def __init__(self, result):
+            self.result = result
+
+        async def arun(self, url, config=None):
+            return self.result
+
+    r = S.Reader()
+
+    async def ensure():
+        return FakeCrawler(crawlers[len(resets)])
+
+    async def reset():
+        resets.append(1)
+
+    monkeypatch.setattr(r, "_ensure_started", ensure)
+    monkeypatch.setattr(r, "_reset", reset)
+    out = asyncio.run(r.fetch("https://example.com/", "article"))
+    assert resets == [1]
+    assert "hello" in out["text"]
 
 
 # ── end to end through Fortress ────────────────────────────────────────
